@@ -1,4 +1,9 @@
 # YoloCamFX
-A javafx application that uses dl4j to detect objects in images and videos
+YoloCamFX is JavaFX Application that shows your webcam (if you have one) in a window and then runs either the default Yolo or Tiny Yolo implementation from dl4j to detect objects in the stream.
 
-This project is essentially a clone of https://github.com/jesuino/java-ml-projects/tree/master/utilities/yolo-dl4j but rewritten to support web cams and videos as well as other dl4j algorithms
+Each detected object is highlighted with a bounding box and marked with its label and confidence values.
+
+You can select to run either yolo or tiny yolo from dl4j and the confidence threshold.
+
+This project is an extension of [yolo-dl4j](https://github.com/jesuino/java-ml-projects/tree/master/utilities/yolo-dl4j) from user jesunino but updated to support webcams.
+
