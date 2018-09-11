@@ -5,7 +5,7 @@ Each detected object is highlighted with a bounding box and marked with its labe
 
 You can select to run either yolo or tiny yolo from dl4j and the confidence threshold.
 
-Yolo can return duplicate predictions for the same object so to remove that non-max suppression algorithm taken from [here](https://dzone.com/articles/java-autonomous-driving-car-detection-1).
+Yolo can return duplicate predictions for the same object so to reduce that a non-max suppression algorithm from [here](https://dzone.com/articles/java-autonomous-driving-car-detection-1) is used.
 
 This project is an extension of [yolo-dl4j](https://github.com/jesuino/java-ml-projects/tree/master/utilities/yolo-dl4j) from user jesunino but updated to support webcams.
 
