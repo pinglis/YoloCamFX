@@ -22,8 +22,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.concurrent.Task;
@@ -93,13 +95,14 @@ public class YoloTask
     };
     
     private final ObjectProperty<BufferedImage> imageBufferProperty = new SimpleObjectProperty<>();
+    private final BooleanProperty filterProperty = new SimpleBooleanProperty();
     private final DoubleProperty thresholdProperty = new SimpleDoubleProperty();
+    private final ImagePreProcessingScaler scaler = new ImagePreProcessingScaler(0, 1);
+    private final Map<String, Paint> colors = new HashMap<>();
     private String[] classes;
-    private Map<String, Paint> colors = new HashMap<>();
     private ComputationGraph graph;
     private Java2DNativeImageLoader bufferLoader;
-    private List<DetectedObject> detectedObjects;
-    private ImagePreProcessingScaler scaler = new ImagePreProcessingScaler(0, 1);
+    private List<BoundingBox> detectedObjects;
     private boolean stop;
     
     public ObjectProperty<BufferedImage> imageBufferProperty()
@@ -107,12 +110,17 @@ public class YoloTask
         return imageBufferProperty;
     }
     
+    public BooleanProperty filterProperty()
+    {
+        return this.filterProperty;
+    }
+    
     public DoubleProperty thresholdProperty()
     {
         return this.thresholdProperty;
     }
     
-    public List<DetectedObject> getDetectedObjects()
+    public List<BoundingBox> getDetectedBoxes()
     {
         return detectedObjects;
     }
@@ -171,7 +179,7 @@ public class YoloTask
                     
                     if ( imageBuffer != null )
                     {
-                        detectedObjects = detect(imageBuffer, threshold);
+                        detectedObjects = convert(detect(imageBuffer, threshold));
                     }
                     else
                     {
@@ -185,6 +193,42 @@ public class YoloTask
         Thread th = new Thread(task);
         th.setDaemon(true);
         th.start();
+    }
+    
+    /**
+     * Convert the detected objects into bounding boxes that can be overlayed
+     * on the image.
+     * 
+     * @param detectedObjects
+     * @return List of BoundingBox
+     */
+    private List<BoundingBox> convert(List<DetectedObject> detectedObjects)
+    {
+        if ( detectedObjects == null )
+        {
+            return null;
+        }
+        List<BoundingBox> boxes = new ArrayList<>(detectedObjects.size());
+        
+        for(DetectedObject obj : detectedObjects)
+        {
+            // Get its class name (label) and wanted color
+            String cls = getClass(obj.getPredictedClass());
+            Paint color = getColor(cls);
+                
+            // Get its confidence as a percentage
+            double confidence = obj.getConfidence()*100;
+            double[] xy1 = obj.getTopLeftXY();
+            double[] xy2 = obj.getBottomRightXY();
+            double x1 = xy1[0] / GRID_W;
+            double y1 = xy1[1] / GRID_H;
+            double x2 = xy2[0] / GRID_W;
+            double y2 = xy2[1] / GRID_H;
+            
+            boxes.add(new BoundingBox(cls, confidence, color, x1, y1, x2, y2));
+        }
+        
+        return boxes;
     }
 
     private List<DetectedObject> detect(BufferedImage buffer, double threshold)
@@ -200,7 +244,12 @@ public class YoloTask
             INDArray output = graph.outputSingle(img);
             Yolo2OutputLayer outputLayer = (Yolo2OutputLayer) graph.getOutputLayer(0);
         
-            predictions = filterDuplicates(outputLayer.getPredictedObjects(output, threshold));
+            predictions = outputLayer.getPredictedObjects(output, threshold);
+            
+            if ( this.filterProperty.get() )
+            {
+                predictions = filterDuplicates(predictions);
+            }
         }
         catch (IOException e)
         {

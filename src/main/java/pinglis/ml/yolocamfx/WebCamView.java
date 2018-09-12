@@ -16,7 +16,9 @@
 package pinglis.ml.yolocamfx;
 
 import java.awt.image.BufferedImage;
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.image.Image;
@@ -30,6 +32,7 @@ public class WebCamView
         extends ImageView
 {
     private final ObjectProperty<BufferedImage> imageBufferProperty = new SimpleObjectProperty<>();
+    private final BooleanProperty pausedProperty = new SimpleBooleanProperty();
     private WebCamTask task;
  
     public WebCamView()
@@ -47,6 +50,15 @@ public class WebCamView
     public ObjectProperty<BufferedImage> imageBufferProperty()
     {
         return imageBufferProperty;
+    }
+    
+    /**
+     * If true, the image will not be updated
+     * @return BooleanProperty
+     */
+    public BooleanProperty pausedProperty()
+    {
+        return this.pausedProperty;
     }
     
     /**

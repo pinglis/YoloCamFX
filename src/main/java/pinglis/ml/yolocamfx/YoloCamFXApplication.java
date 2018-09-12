@@ -29,8 +29,10 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Slider;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.Paint;
@@ -87,28 +89,27 @@ public class YoloCamFXApplication
     @Override
     public void start(Stage stage) throws Exception
     {   
-        
         // The UI comprises of a borderpane with a central pane displaying the
         // webcam and a bottom pane with some basic controls
         BorderPane root = new BorderPane();
         
         // Create the webcam view and start it running
-        WebCamView yoloView = new WebCamView();
-        yoloView.start();
+        WebCamView camView = new WebCamView();
+        camView.start();
         
         // Create a canvas for the yolo to draw on
         Canvas canvas = new Canvas();
-        canvas.widthProperty().bind(yoloView.fitWidthProperty());
-        canvas.heightProperty().bind(yoloView.fitHeightProperty());
+        canvas.widthProperty().bind(camView.fitWidthProperty());
+        canvas.heightProperty().bind(camView.fitHeightProperty());
         
         // Put them both in a stackpane with the canvas on top
-        StackPane stack = new StackPane(yoloView, canvas);
+        StackPane stack = new StackPane(camView, canvas);
         root.setCenter(stack);
         
         // Create a combo to select the model to run
-        ComboBox combo = new ComboBox();
-        combo.setItems(MODELS);
-        combo.getSelectionModel().select(0);
+        ComboBox modelCombo = new ComboBox();
+        modelCombo.setItems(MODELS);
+        modelCombo.getSelectionModel().select(0);
         
         // Create a slider to allow the user to control the confidence threshold
         Slider sldThreshold = new Slider(0.1f, 1.0f, DEFAULT_THRESHOLD);
@@ -117,27 +118,45 @@ public class YoloCamFXApplication
         sldThreshold.setBlockIncrement(0.01);
         sldThreshold.setShowTickMarks(true);
         
+        // Create drop down to allow the user to filter duplicates
+        ComboBox filterCombo = new ComboBox();
+        filterCombo.setItems(FXCollections.observableArrayList(true, false));
+        filterCombo.getSelectionModel().select(0);
+        
+        // Create pause button
+        ToggleButton pauseButton = new ToggleButton();
+        pauseButton.setText("Pause Camera");
+        camView.pausedProperty().bind(pauseButton.selectedProperty());
+        
         // Add the controls to the bottom pane
-        HBox hbBottom = new HBox(10, new Label("Model"), combo, new Label("Confidence Threshold: "), sldThreshold);
+        HBox hbBottom = new HBox(10, 
+                new Label("Model:"), modelCombo, 
+                new Label("Filter duplicates:"), filterCombo,
+                new Label("Confidence Threshold: "), sldThreshold,
+                pauseButton
+        );
         hbBottom.setAlignment(Pos.CENTER);
         root.setBottom(hbBottom);
         
         // Layout the scene
-        scene = new Scene(root, 1200, 800);
+        scene = new Scene(root);
+        stage.setMinWidth(900);
+        stage.setMinHeight(700);
         stage.setScene(scene);
         stage.setTitle("YoloWebCamFX");
         stage.show();
         
         // Start the yolo algorithm running using the default selected model
         YoloTask yolo = new YoloTask();
-        yolo.imageBufferProperty().bind(yoloView.imageBufferProperty());
+        yolo.imageBufferProperty().bind(camView.imageBufferProperty());
         yolo.thresholdProperty().bind(sldThreshold.valueProperty());
-        yolo.start(false);
+        yolo.start(modelCombo.getSelectionModel().getSelectedIndex() == 0);
+        yolo.filterProperty().bind(filterCombo.valueProperty());
         
         // Monitor the combo and if select changes, change the yolo model running
-        combo.selectionModelProperty().addListener((a,b,c)->{
+        modelCombo.getSelectionModel().selectedIndexProperty().addListener((a,b,c)->{
             yolo.close();
-            yolo.start(combo.getSelectionModel().getSelectedIndex() == 0);
+            yolo.start(c.intValue()==0);
         });
         
         // Start a animation timer to draw the current bounding boxes on the screen
@@ -167,34 +186,21 @@ public class YoloCamFXApplication
             
         double h = canvas.getHeight();
         double w = canvas.getWidth();
-        int gridW = yolo.GRID_W;
-        int gridH = yolo.GRID_H;
-        List<DetectedObject> detectedObjects = yolo.getDetectedObjects();
+        List<BoundingBox> detectedBoxes = yolo.getDetectedBoxes();
         
         // First clear the canvas of the last image we wrote to it
         ctx.clearRect(0, 0, w, h);
         
         // If the yolo has found some objects
-        if ( detectedObjects != null )
+        if ( detectedBoxes != null )
         {
             // For detected object
-            for (DetectedObject obj : detectedObjects)
+            for (BoundingBox box : detectedBoxes)
             {
-                // Get its class name (label) and wanted color
-                String cls = yolo.getClass(obj.getPredictedClass());
-                Paint color = yolo.getColor(cls);
-                
-                // Get its confidence as a percentage
-                double confidence = obj.getConfidence()*100;
-                
-                
-                double[] xy1 = obj.getTopLeftXY();
-                double[] xy2 = obj.getBottomRightXY();
-                
-                int x1 = Math.max(15,(int) Math.round(w * xy1[0] / gridW));
-                int y1 = Math.max(15,(int) Math.round(h * xy1[1] / gridH));
-                int x2 = Math.min((int)w,(int) Math.round(w * xy2[0] / gridW));
-                int y2 = Math.min((int)h,(int) Math.round(h * xy2[1] / gridH));
+                int x1 = (int)Math.max(0, Math.round(box.getX1() * w));
+                int y1 = (int)Math.max(15, Math.round(box.getY1() * h));
+                int x2 = (int)Math.min(w-1, Math.round(box.getX2() * w));
+                int y2 = (int)Math.min(h-1, Math.round(box.getY2() * h));
                 
                 int rectW = x2 - x1;
                 int rectH = y2 - y1;
@@ -203,11 +209,11 @@ public class YoloCamFXApplication
                 int ty = y1 - 2;
                         
                 ctx.setLineWidth(2);
-                ctx.setStroke(color);
+                ctx.setStroke(box.getPaint());
                 ctx.strokeRect(x1, y1, rectW, rectH);
                 
                 ctx.setLineWidth(1);
-                String text = String.format("%s [%.2f%%]", cls, confidence);
+                String text = String.format("%s [%.2f%%]", box.getLabel(), box.getConfidence());
                 ctx.strokeText(text, tx, ty);
                 ctx.fillText(text, tx, ty);
             }

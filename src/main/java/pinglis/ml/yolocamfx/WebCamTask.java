@@ -25,7 +25,7 @@ import javafx.concurrent.Task;
 public class WebCamTask 
         extends Task<Void>
 {
-    private WebCamView view;
+    private final WebCamView view;
     private Webcam webCam = null;
     private boolean stopCamera = false;
     
@@ -58,7 +58,10 @@ public class WebCamTask
                             
                     if ((grabbedImageBuffer = webCam.getImage()) != null)
                     {
-                        view.imageBufferProperty().set(grabbedImageBuffer);
+                        if ( !view.pausedProperty().get() )
+                        {
+                            view.imageBufferProperty().set(grabbedImageBuffer);
+                        }
                     }
                 }
                 catch (Exception e)
