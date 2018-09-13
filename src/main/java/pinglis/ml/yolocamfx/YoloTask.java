@@ -47,11 +47,11 @@ import org.nd4j.linalg.dataset.api.preprocessor.ImagePreProcessingScaler;
  */
 public class YoloTask
 {
-    public final int INPUT_WIDTH = 416;
-    public final int INPUT_HEIGHT = 416;
-    public final int INPUT_CHANNELS = 3;
-    public final int GRID_W = 13;
-    public final int GRID_H = 13;
+    private final static int INPUT_WIDTH = 416;
+    private final static int INPUT_HEIGHT = 416;
+    private final static int INPUT_CHANNELS = 3;
+    private final static int GRID_W = 13;
+    private final static int GRID_H = 13;
     
     private static final String[] TINY_CLASSES = {
         "Aeroplane", "Bicycle", "Bird", 
@@ -98,12 +98,8 @@ public class YoloTask
     private final BooleanProperty filterProperty = new SimpleBooleanProperty();
     private final DoubleProperty thresholdProperty = new SimpleDoubleProperty();
     private final ImagePreProcessingScaler scaler = new ImagePreProcessingScaler(0, 1);
-    private final Map<String, Paint> colors = new HashMap<>();
-    private String[] classes;
-    private ComputationGraph graph;
-    private Java2DNativeImageLoader bufferLoader;
     private List<BoundingBox> detectedObjects;
-    private boolean stop;
+    private Task<Void> task;
     
     public ObjectProperty<BufferedImage> imageBufferProperty()
     {
@@ -125,31 +121,29 @@ public class YoloTask
         return detectedObjects;
     }
     
-    public String getClass(int forPrediction)
-    {
-        return classes[forPrediction];
-    }
-    
-    public Paint getColor(String forClass)
-    {
-        return colors.get(forClass);
-    }
-    
     public void close()
     {
-        stop = true;
+        if ( task != null)
+        {
+            task.cancel();
+            task = null;
+        }
     }
     
     public void start(boolean isTiny)
     {
-        Task<Void> task = new Task<Void>()
+        task = new Task<Void>()
         {
             @Override
             protected Void call() throws Exception
             {
-                stop = false;
                 try
                 {
+                    ComputationGraph graph;
+                    Java2DNativeImageLoader bufferLoader;
+                    Map<String, Paint> colors = new HashMap<>();
+                    String[] classes;
+    
                     if (isTiny)
                     {
                         graph = (ComputationGraph) TinyYOLO.builder().build().initPretrained();                      
@@ -162,29 +156,30 @@ public class YoloTask
                         bufferLoader = new Java2DNativeImageLoader(INPUT_WIDTH, INPUT_HEIGHT, INPUT_CHANNELS, new ColorConversionTransform(COLOR_BGR2RGB));
                         classes = CLASSES;
                     }
-                }
-                catch (IOException e)
-                {
-                    throw new Error("Not able to init the model", e);
-                }
 
-                for (int i = 0; i < classes.length; i++)
-                {
-                    colors.put(classes[i], Color.hsb((i + 1) * 20, 0.5, 1.0));
+                    for (int i = 0; i < classes.length; i++)
+                    {
+                        colors.put(classes[i], Color.hsb((i + 1) * 20, 0.6, 1.0));
+                    }
+                    while (!this.isCancelled())
+                    {
+                        BufferedImage imageBuffer = imageBufferProperty.getValue();
+                        double threshold = thresholdProperty.getValue();
+                        
+                        if ( imageBuffer != null )
+                        {
+                            List<DetectedObject> rawDetectedObjects = detect(graph, bufferLoader, imageBuffer, threshold);
+                            detectedObjects = convert(rawDetectedObjects, classes, colors);
+                        }
+                        else
+                        {
+                            detectedObjects = null;
+                        }
+                    }
                 }
-                while (!stop)
+                catch (Exception e)
                 {
-                    BufferedImage imageBuffer = imageBufferProperty.get();
-                    double threshold = thresholdProperty.get();
-                    
-                    if ( imageBuffer != null )
-                    {
-                        detectedObjects = convert(detect(imageBuffer, threshold));
-                    }
-                    else
-                    {
-                        detectedObjects = null;
-                    }
+                    e.printStackTrace(System.err);
                 }
                 return null;
             }
@@ -192,6 +187,7 @@ public class YoloTask
 
         Thread th = new Thread(task);
         th.setDaemon(true);
+        th.setName("YoloTask");
         th.start();
     }
     
@@ -202,7 +198,7 @@ public class YoloTask
      * @param detectedObjects
      * @return List of BoundingBox
      */
-    private List<BoundingBox> convert(List<DetectedObject> detectedObjects)
+    private List<BoundingBox> convert(List<DetectedObject> detectedObjects, String[] classes, Map<String, Paint> colors)
     {
         if ( detectedObjects == null )
         {
@@ -213,8 +209,8 @@ public class YoloTask
         for(DetectedObject obj : detectedObjects)
         {
             // Get its class name (label) and wanted color
-            String cls = getClass(obj.getPredictedClass());
-            Paint color = getColor(cls);
+            String cls = classes[obj.getPredictedClass()];
+            Paint color = colors.get(cls);
                 
             // Get its confidence as a percentage
             double confidence = obj.getConfidence()*100;
@@ -231,13 +227,13 @@ public class YoloTask
         return boxes;
     }
 
-    private List<DetectedObject> detect(BufferedImage buffer, double threshold)
+    private List<DetectedObject> detect(ComputationGraph graph, Java2DNativeImageLoader bufferLoader, BufferedImage buffer, double threshold)
     {
         List<DetectedObject> predictions = null;
         
         try
         {
-            INDArray img = this.bufferLoader.asMatrix(buffer);
+            INDArray img = bufferLoader.asMatrix(buffer);
             
             scaler.transform(img);
             

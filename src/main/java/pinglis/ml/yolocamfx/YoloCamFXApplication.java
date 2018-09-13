@@ -16,7 +16,6 @@
 package pinglis.ml.yolocamfx;
 
 import java.io.IOException;
-import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -25,19 +24,17 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.stage.Stage;
 import java.util.List;
+import javafx.animation.AnimationTimer;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.Paint;
 import javafx.scene.text.TextAlignment;
-import org.deeplearning4j.nn.layers.objdetect.DetectedObject;
 
 /**
  * Main entry point for the YoloCamFX project. 
@@ -168,7 +165,7 @@ public class YoloCamFXApplication
                 drawBoxes(yolo, canvas);
             }
         };
-        timer.start();
+        timer.start();    
     }
     
     /**

@@ -23,7 +23,6 @@ import javafx.concurrent.Task;
  * Task that captures input from your default webcam
  */
 public class WebCamTask 
-        extends Task<Void>
 {
     private final WebCamView view;
     private Webcam webCam = null;
@@ -34,44 +33,55 @@ public class WebCamTask
         this.view = view;    
     }
     
-    @Override
-    protected Void call() 
+    public void start() 
             throws Exception
     {
         if (webCam != null)
         {
             close();
         }
-        webCam = Webcam.getDefault();
-                
-        if ( webCam != null )
+    
+        Task<Void> task = new Task<Void>()
         {
-            stopCamera = false;
-            webCam.setViewSize(webCam.getViewSizes()[webCam.getViewSizes().length - 1]);
-            webCam.open();
-                    
-            while (!stopCamera)
+            @Override
+            protected Void call() throws Exception
             {
-                try
+                webCam = Webcam.getDefault();
+                
+                if ( webCam != null )
                 {
-                    BufferedImage grabbedImageBuffer=null;
-                            
-                    if ((grabbedImageBuffer = webCam.getImage()) != null)
+                    stopCamera = false;
+                    webCam.setViewSize(webCam.getViewSizes()[webCam.getViewSizes().length - 1]);
+                    webCam.open();
+                    
+                    while (!stopCamera)
                     {
-                        if ( !view.pausedProperty().get() )
+                        try
                         {
-                            view.imageBufferProperty().set(grabbedImageBuffer);
+                            BufferedImage grabbedImageBuffer=null;
+                            
+                            if ((grabbedImageBuffer = webCam.getImage()) != null)
+                            {
+                                if ( !view.pausedProperty().get() )
+                                {
+                                    view.imageBufferProperty().set(grabbedImageBuffer);
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            e.printStackTrace();
                         }
                     }
                 }
-                catch (Exception e)
-                {
-                    e.printStackTrace();
-                }
-            }
-        }
                 
-        return null;
+                return null;
+            }
+        };
+
+        Thread th = new Thread(task);
+        th.setDaemon(true);
+        th.start();
     }
     
     public void close()
