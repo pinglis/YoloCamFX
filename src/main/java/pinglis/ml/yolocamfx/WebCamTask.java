@@ -34,7 +34,6 @@ public class WebCamTask
     }
     
     public void start() 
-            throws Exception
     {
         if (webCam != null)
         {
@@ -81,6 +80,7 @@ public class WebCamTask
 
         Thread th = new Thread(task);
         th.setDaemon(true);
+        th.setName("WebCam");
         th.start();
     }
     
